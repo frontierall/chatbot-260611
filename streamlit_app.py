@@ -1,5 +1,9 @@
+import hashlib
+import io
 import json
+
 import streamlit as st
+from audio_recorder_streamlit import audio_recorder
 from openai import OpenAI
 
 st.title("💬 Chatbot")
@@ -66,23 +70,54 @@ client = OpenAI(api_key=openai_api_key)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "last_audio_hash" not in st.session_state:
+    st.session_state.last_audio_hash = None
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("메시지를 입력하세요…"):
+# Voice input — click to record, click again (or 2s silence) to stop
+st.write("🎤 음성 입력 (버튼 클릭 후 말하기):")
+audio_bytes = audio_recorder(pause_threshold=2.0, sample_rate=41_000)
+
+voice_prompt = None
+if audio_bytes:
+    audio_hash = hashlib.md5(audio_bytes).hexdigest()
+    if audio_hash != st.session_state.last_audio_hash:
+        st.session_state.last_audio_hash = audio_hash
+        with st.spinner("음성 인식 중..."):
+            try:
+                audio_file = io.BytesIO(audio_bytes)
+                audio_file.name = "audio.wav"
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="ko",
+                )
+                voice_prompt = transcript.text
+                if voice_prompt:
+                    st.info(f"인식된 텍스트: **{voice_prompt}**")
+            except Exception as e:
+                st.error(f"음성 인식 실패: {e}")
+
+text_prompt = st.chat_input("메시지를 입력하거나 위의 🎤 버튼으로 말하세요")
+prompt = voice_prompt or text_prompt
+
+if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    stream = client.chat.completions.create(
-        model=model,
-        messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-        temperature=temperature,
-        stream=True,
-    )
-
-    with st.chat_message("assistant"):
-        response = st.write_stream(stream)
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    try:
+        stream = client.chat.completions.create(
+            model=model,
+            messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+            temperature=temperature,
+            stream=True,
+        )
+        with st.chat_message("assistant"):
+            response = st.write_stream(stream)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+    except Exception as e:
+        st.error(f"응답 생성 실패: {e}")
