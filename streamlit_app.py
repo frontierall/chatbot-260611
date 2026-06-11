@@ -7,82 +7,6 @@ import streamlit as st
 from audio_recorder_streamlit import audio_recorder
 from openai import OpenAI
 
-st.title("💬 Chatbot")
-
-# ── Sidebar ──────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.header("Settings")
-
-    openai_api_key = st.text_input("OpenAI API Key", type="password")
-
-    model = st.selectbox(
-        "Model",
-        options=["gpt-5.4-mini", "gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
-        index=0,
-        help="gpt-5.4-mini: 최신/빠름 | gpt-4o-mini: 성능/가격 균형 | gpt-4o: 고성능 | gpt-3.5-turbo: 구형",
-    )
-
-    temperature = st.slider(
-        "Temperature",
-        min_value=0.0,
-        max_value=2.0,
-        value=0.7,
-        step=0.1,
-        help="낮을수록 일관된 답변, 높을수록 창의적인 답변",
-    )
-
-    st.divider()
-    st.subheader("Export Chat")
-
-    if st.session_state.get("messages"):
-        # TXT export
-        txt_lines = "\n".join(
-            f"[{m['role'].upper()}]\n{m['content']}\n"
-            for m in st.session_state.messages
-        )
-        st.download_button(
-            label="Download as .txt",
-            data=txt_lines,
-            file_name="chat_history.txt",
-            mime="text/plain",
-        )
-
-        # JSON export
-        json_data = json.dumps(st.session_state.messages, ensure_ascii=False, indent=2)
-        st.download_button(
-            label="Download as .json",
-            data=json_data,
-            file_name="chat_history.json",
-            mime="application/json",
-        )
-
-        if st.button("Clear Chat", type="secondary"):
-            st.session_state.messages = []
-            st.rerun()
-    else:
-        st.caption("대화를 시작하면 내보내기가 활성화됩니다.")
-
-    st.divider()
-    st.subheader("데이터 분석")
-    uploaded_file = st.file_uploader(
-        "CSV 또는 Excel 파일 업로드",
-        type=["csv", "xlsx", "xls"],
-        help="파일을 업로드하면 챗봇이 데이터를 인식하고 분석해 드립니다.",
-    )
-    if uploaded_file:
-        try:
-            df, warning = load_dataframe(uploaded_file)
-            st.session_state.df = df
-            st.success(f"{df.shape[0]}행 × {df.shape[1]}열 로드됨")
-            if warning:
-                st.warning(warning)
-            with st.expander("데이터 미리보기"):
-                st.dataframe(df.head(10), use_container_width=True)
-        except Exception as e:
-            st.error(f"파일 로드 실패: {e}")
-            st.session_state.df = None
-    elif "df" not in st.session_state:
-        st.session_state.df = None
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def load_dataframe(uploaded_file) -> tuple[pd.DataFrame, str | None]:
@@ -120,7 +44,6 @@ def build_system_message(df: pd.DataFrame | None) -> str:
     base = "당신은 친절하고 유능한 AI 어시스턴트입니다."
     if df is None:
         return base
-    # Cap rows/cols shown to keep token usage reasonable
     describe_str = df.describe(include="all").to_string()
     head_str = df.head(5).to_string()
     return (
@@ -143,6 +66,82 @@ def build_system_message(df: pd.DataFrame | None) -> str:
 """
     )
 
+
+# ── App ───────────────────────────────────────────────────────────────────────
+st.title("💬 Chatbot")
+
+# ── Sidebar ──────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.header("Settings")
+
+    openai_api_key = st.text_input("OpenAI API Key", type="password")
+
+    model = st.selectbox(
+        "Model",
+        options=["gpt-5.4-mini", "gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+        index=0,
+        help="gpt-5.4-mini: 최신/빠름 | gpt-4o-mini: 성능/가격 균형 | gpt-4o: 고성능 | gpt-3.5-turbo: 구형",
+    )
+
+    temperature = st.slider(
+        "Temperature",
+        min_value=0.0,
+        max_value=2.0,
+        value=0.7,
+        step=0.1,
+        help="낮을수록 일관된 답변, 높을수록 창의적인 답변",
+    )
+
+    st.divider()
+    st.subheader("Export Chat")
+
+    if st.session_state.get("messages"):
+        txt_lines = "\n".join(
+            f"[{m['role'].upper()}]\n{m['content']}\n"
+            for m in st.session_state.messages
+        )
+        st.download_button(
+            label="Download as .txt",
+            data=txt_lines,
+            file_name="chat_history.txt",
+            mime="text/plain",
+        )
+
+        json_data = json.dumps(st.session_state.messages, ensure_ascii=False, indent=2)
+        st.download_button(
+            label="Download as .json",
+            data=json_data,
+            file_name="chat_history.json",
+            mime="application/json",
+        )
+
+        if st.button("Clear Chat", type="secondary"):
+            st.session_state.messages = []
+            st.rerun()
+    else:
+        st.caption("대화를 시작하면 내보내기가 활성화됩니다.")
+
+    st.divider()
+    st.subheader("데이터 분석")
+    uploaded_file = st.file_uploader(
+        "CSV 또는 Excel 파일 업로드",
+        type=["csv", "xlsx", "xls"],
+        help="파일을 업로드하면 챗봇이 데이터를 인식하고 분석해 드립니다.",
+    )
+    if uploaded_file:
+        try:
+            df, warning = load_dataframe(uploaded_file)
+            st.session_state.df = df
+            st.success(f"{df.shape[0]}행 × {df.shape[1]}열 로드됨")
+            if warning:
+                st.warning(warning)
+            with st.expander("데이터 미리보기"):
+                st.dataframe(df.head(10), use_container_width=True)
+        except Exception as e:
+            st.error(f"파일 로드 실패: {e}")
+            st.session_state.df = None
+    elif "df" not in st.session_state:
+        st.session_state.df = None
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 if not openai_api_key:
