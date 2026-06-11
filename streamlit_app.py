@@ -71,12 +71,11 @@ with st.sidebar:
     )
     if uploaded_file:
         try:
-            if uploaded_file.name.endswith(".csv"):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
+            df, warning = load_dataframe(uploaded_file)
             st.session_state.df = df
             st.success(f"{df.shape[0]}행 × {df.shape[1]}열 로드됨")
+            if warning:
+                st.warning(warning)
             with st.expander("데이터 미리보기"):
                 st.dataframe(df.head(10), use_container_width=True)
         except Exception as e:
@@ -86,6 +85,37 @@ with st.sidebar:
         st.session_state.df = None
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+def load_dataframe(uploaded_file) -> tuple[pd.DataFrame, str | None]:
+    """Load CSV or Excel with encoding/separator auto-detection.
+
+    Returns (df, warning) where warning is non-None if bad lines were skipped.
+    """
+    if not uploaded_file.name.endswith(".csv"):
+        return pd.read_excel(uploaded_file), None
+
+    raw = uploaded_file.read()
+    for encoding in ("utf-8", "cp949", "euc-kr", "latin-1"):
+        try:
+            text = raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+
+        buf = io.StringIO(text)
+        try:
+            return pd.read_csv(buf, sep=None, engine="python"), None
+        except Exception:
+            pass
+
+        buf.seek(0)
+        try:
+            df = pd.read_csv(buf, sep=None, engine="python", on_bad_lines="skip")
+            return df, "일부 형식이 맞지 않는 행이 건너뛰어졌습니다."
+        except Exception:
+            continue
+
+    raise ValueError("지원하지 않는 파일 형식 또는 인코딩입니다.")
+
+
 def build_system_message(df: pd.DataFrame | None) -> str:
     base = "당신은 친절하고 유능한 AI 어시스턴트입니다."
     if df is None:
