@@ -12,9 +12,9 @@ with st.sidebar:
 
     model = st.selectbox(
         "Model",
-        options=["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+        options=["gpt-5.4-mini", "gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
         index=0,
-        help="gpt-4o-mini: 성능/가격 균형 | gpt-4o: 최고 성능 | gpt-3.5-turbo: 구형",
+        help="gpt-5.4-mini: 최신/빠름 | gpt-4o-mini: 성능/가격 균형 | gpt-4o: 고성능 | gpt-3.5-turbo: 구형",
     )
 
     temperature = st.slider(
