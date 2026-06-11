@@ -1,3 +1,5 @@
 streamlit
 openai
 audio-recorder-streamlit
+pandas
+openpyxl

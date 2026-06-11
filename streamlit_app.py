@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 
+import pandas as pd
 import streamlit as st
 from audio_recorder_streamlit import audio_recorder
 from openai import OpenAI
@@ -61,6 +62,58 @@ with st.sidebar:
     else:
         st.caption("대화를 시작하면 내보내기가 활성화됩니다.")
 
+    st.divider()
+    st.subheader("데이터 분석")
+    uploaded_file = st.file_uploader(
+        "CSV 또는 Excel 파일 업로드",
+        type=["csv", "xlsx", "xls"],
+        help="파일을 업로드하면 챗봇이 데이터를 인식하고 분석해 드립니다.",
+    )
+    if uploaded_file:
+        try:
+            if uploaded_file.name.endswith(".csv"):
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+            st.session_state.df = df
+            st.success(f"{df.shape[0]}행 × {df.shape[1]}열 로드됨")
+            with st.expander("데이터 미리보기"):
+                st.dataframe(df.head(10), use_container_width=True)
+        except Exception as e:
+            st.error(f"파일 로드 실패: {e}")
+            st.session_state.df = None
+    elif "df" not in st.session_state:
+        st.session_state.df = None
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def build_system_message(df: pd.DataFrame | None) -> str:
+    base = "당신은 친절하고 유능한 AI 어시스턴트입니다."
+    if df is None:
+        return base
+    # Cap rows/cols shown to keep token usage reasonable
+    describe_str = df.describe(include="all").to_string()
+    head_str = df.head(5).to_string()
+    return (
+        base
+        + f"""
+
+사용자가 데이터 파일을 업로드했습니다. 아래 정보를 바탕으로 질문에 답하세요.
+
+[데이터 크기]
+{df.shape[0]}행 × {df.shape[1]}열
+
+[컬럼 및 타입]
+{df.dtypes.to_string()}
+
+[기초 통계]
+{describe_str}
+
+[처음 5행]
+{head_str}
+"""
+    )
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 if not openai_api_key:
     st.info("사이드바에 OpenAI API 키를 입력하면 대화를 시작할 수 있습니다.", icon="🗝️")
@@ -110,9 +163,11 @@ if prompt:
         st.markdown(prompt)
 
     try:
+        system_msg = {"role": "system", "content": build_system_message(st.session_state.df)}
+        chat_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
         stream = client.chat.completions.create(
             model=model,
-            messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+            messages=[system_msg] + chat_history,
             temperature=temperature,
             stream=True,
         )
